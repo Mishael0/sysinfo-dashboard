@@ -186,10 +186,10 @@ mem_info() {
 
     }
 
- disk_info() {
-	    local line filesystem size used avail pcent pcent_int mount
-	    local color status
-	    local disk_json="" entry
+  disk_info() {
+	 local line filesystem size used avail pcent pcent_int mount
+	 local color status
+	 local disk_json="" entry
 
 	   # Header (non-JSON mode)
 	   if [[ "${JSON_MODE:-false}" != "true" ]]; then
@@ -226,7 +226,7 @@ mem_info() {
 			  printf "%-20s %-8s %-8s %-8s %s%-6s${NC} %s\n" \
 				  "$filesystem" "$size" "$used" "$avail" \																     "$color" "$pcent" "$status"
 	  fi
-  done < <(df -h --output=source,size,used,avail,pcent,target | grep '^/dev/')
+ 		 done < <(df -h --output=source,size,used,avail,pcent,target | grep '^/dev/')
 
 	   #finalise
 	   if [[ "${JSON_MODE:-false}" == "true" ]]; then 																    JSON_DISKS="[$disk_json]"							    										    else
@@ -234,9 +234,9 @@ mem_info() {
 	   fi	
    }
 
- top_processes() {
-	   local line pid mem cpu cmd mem_int color
-	   local proc_json="" entry
+top_processes() {
+	 local line pid mem cpu cmd mem_int color
+	 local proc_json="" entry
 
 	   if [[ "${JSON_MODE:-false}" != "true" ]]; then
 		   echo -e "${BOLD}[ TOP 5 PROCESSES BY MEMORY ]${NC}"
@@ -246,38 +246,85 @@ mem_info() {
 		   # Parse the four pre-formatted fields
 		   read -r pid mem cpu cmd <<< "$line"
 
-																						#  Strip path — get base command name only
-																						cmd=$(basename "$cmd" 2>/dev/null || echo "$cmd")
+																					       	#  Strip path — get base command name only
+																					         cmd=$(basename "$cmd" 2>/dev/null || echo "$cmd")
 
 																						#  Convert float to integer for threshold comparison
-																						mem_int=${mem%.*}
+																						 mem_int=${mem%.*}
 
 																						## Color logic based on memory percentage
-																						if (( mem_int >= CRIT_THRESHOLD )); then
+																						 if (( mem_int >= CRIT_THRESHOLD )); then
 																							color="${RED}"
-																						elif (( mem_int >= WARN_THRESHOLD )); then
+																						 elif (( mem_int >= WARN_THRESHOLD )); then
 																							color="${YELLOW}"
-																						else
+																						 else
 																							color="${GREEN}"
-																						fi
+																						 fi
 
 																						#  JSON or display
-																						if [[ "${JSON_MODE:-false}" == "true" ]]; then
+																						 if [[ "${JSON_MODE:-false}" == "true" ]]; then
 																							entry="{\"pid\":$pid,\"mem_percent\":$mem,\"cpu_percent\":$cpu,\"command\":\"$cmd\"}"
 																							if [[ -z "$proc_json" ]]; then
 																								proc_json="$entry"
 																							else
 																								proc_json="${proc_json}, $entry"						        									fi
 																						else
-																							printf "%-8s %s%-8s${NC} %-8s %s\n" \
-																								"$pid" "$color" "$mem" "$cpu" "$cmd"
+																								printf "%-8s %s%-8s${NC} %-8s %s\n" \
+																									"$pid" "$color" "$mem" "$cpu" "$cmd"
 																						fi
-		done < <(ps aux --sort=-%mem | awk 'NR>1 {print $2, $4, $3, $11}' | head -n 5)
- 
+																							done < <(ps aux --sort=-%mem | awk 'NR>1 {print $2, $4, $3, $11}' | head -n 5)
+
 																						# Finalise JSON array
 																						if [[ "${JSON_MODE:-false}" == "true" ]]; then
 																							JSON_PROCESSES="[$proc_json]"
 																						else
+																							echo ""
+																						fi
+																					}
+																					network() {
+																					       local line iface ip_cidr ip_addr mac internet_status
+																					       local net_json="" entry
+
+																						if [[ "${JSON_MODE:-false}" != "true" ]]; then
+																							echo -e "${BOLD}[ NETWORK INTERFACES ]${NC}"
+																							printf "%-15s %-20s %s\n" "Interface" "IP Address" "MAC Address"
+																						fi
+																						while IFS= read -r line; do
+																							# Extract interface and IP in one read
+																							read -r iface ip_cidr <<< "$line"
+																							ip_addr=${ip_cidr%%/*}
+
+																						 # Get MAC for this interface
+																						 mac=$(ip link show "$iface" 2>/dev/null | awk '/ether/ {print $2}')
+																						 mac="${mac:-N/A}"
+
+																						 # JSON or display
+																						 if [[ "${JSON_MODE:-false}" == "true" ]]; then
+																							 entry="{\"interface\":\"$iface\",\"ip\":\"$ip_addr\",\"mac\":\"$mac\"}"
+																							 if [[ -z "$net_json" ]]; then
+																								 net_json="$entry"
+																							 else
+																								 net_json="${net_json}, $entry"
+																							 fi
+																						 else
+																							 printf "%-15s %-20s %s\n" "$iface" "$ip_addr" "$mac"
+																						 fi
+																					 	done < <(ip -o addr show | grep ' inet ' | awk '{print $2, $4}')
+
+																						# Finalise JSON array
+																						if [[ "${JSON_MODE:-false}" == "true" ]]; then
+																							JSON_NETWORK="[$net_json]"
+																						fi
+																						# Connectivity check
+																						if ping -c 1 -W 2 8.8.8.8 &>/dev/null; then
+																							internet_status="${GREEN}✔ Connected${NC}"
+																							JSON_INTERNET="true"
+																						else
+																							internet_status="${RED}✖ No Connectivity${NC}"
+																							JSON_INTERNET="false"
+																						fi
+
+																						if [[ "${JSON_MODE:-false}" != "true" ]]; then																	echo -e "\nInternet         : $internet_status"
 																							echo ""
 																						fi
 																					}
