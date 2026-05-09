@@ -186,7 +186,7 @@ mem_info() {
 
     }
 
-    disk_info() {
+ disk_info() {
 	    local line filesystem size used avail pcent pcent_int mount
 	    local color status
 	    local disk_json="" entry
@@ -195,40 +195,89 @@ mem_info() {
 	   if [[ "${JSON_MODE:-false}" != "true" ]]; then
 		   echo -e "${BOLD}[ DISK USAGE ]${NC}"
 		   printf "%-20s %-8s %-8s %-8s %-6s %s\n" \
-		   "Filesystem" "Size" "Used" "Avail" "Use%" "Status"
+			   "Filesystem" "Size" "Used" "Avail" "Use%" "Status"
 	   fi
 
-		  while IFS= read -r line; do
-	  # Extract all columns in one operation
+	   while IFS= read -r line; do
+		   # Extract all columns in one operation
 		   read -r filesystem size used avail pcent mount <<< "$line"
 
 	  # Strip % sign to get clean integer
-	       	pcent_int=${pcent//%/}
+	  pcent_int=${pcent//%/}
 
 	  # Threshold color logic
-	    if (( pcent_int >= CRIT_THRESHOLD )); then
-		     color="${RED}"
-		     status="✖ CRITICAL"
-	    elif (( pcent_int >= WARN_THRESHOLD )); then
-		     color="${YELLOW}"
-		     status="⚠ WARNING"
-	    else
-		     color="${GREEN}"
-		     status="✔ OK"
-	    fi   
+	  if (( pcent_int >= CRIT_THRESHOLD )); then
+		  color="${RED}"
+		  status="✖ CRITICAL"
+	  elif (( pcent_int >= WARN_THRESHOLD )); then
+		  color="${YELLOW}"
+		  status="⚠ WARNING"
+	  else
+		  color="${GREEN}"
+		  status="✔ OK"
+	  fi   
 
 	  # JSON accumulation
-																						     if [[ "${JSON_MODE:-false}" == "true" ]]; then
-	        																					     entry="{\"mount\":\"$mount\",\"used_percent\":$pcent_int}"
-																						     if [[ -z "$disk_json" ]]; then
-																							     disk_json="$entry"																	             else
-		     disk_json="${disk_json}, $entry"																     fi
-																						     printf "%-20s %-8s %-8s %-8s %s%-6s${NC} %s\n" \
-	   	  "$filesystem" "$size" "$used" "$avail" \																     "$color" "$pcent" "$status"
-	     fi
-              done < <(df -h --output=source,size,used,avail,pcent,target | grep '^/dev/')
+	  if [[ "${JSON_MODE:-false}" == "true" ]]; then
+		  entry="{\"mount\":\"$mount\",\"used_percent\":$pcent_int}"
+		  if [[ -z "$disk_json" ]]; then
+			  disk_json="$entry"																	             else
+			  disk_json="${disk_json}, $entry"																     fi
+			  printf "%-20s %-8s %-8s %-8s %s%-6s${NC} %s\n" \
+				  "$filesystem" "$size" "$used" "$avail" \																     "$color" "$pcent" "$status"
+	  fi
+  done < <(df -h --output=source,size,used,avail,pcent,target | grep '^/dev/')
 
 	   #finalise
-          	   								                      			      	 						    if [[ "${JSON_MODE:-false}" == "true" ]]; then 																    JSON_DISKS="[$disk_json]"							    										    else
-																							    echo ""
-																						    fi																				}
+	   if [[ "${JSON_MODE:-false}" == "true" ]]; then 																    JSON_DISKS="[$disk_json]"							    										    else
+		   echo "" 
+	   fi	
+   }
+
+ top_processes() {
+	   local line pid mem cpu cmd mem_int color
+	   local proc_json="" entry
+
+	   if [[ "${JSON_MODE:-false}" != "true" ]]; then
+		   echo -e "${BOLD}[ TOP 5 PROCESSES BY MEMORY ]${NC}"
+		   printf "%-8s %-8s %-8s %s\n" "PID" "%MEM" "%CPU" "COMMAND"
+	   fi
+	   while IFS= read -r line; do
+		   # Parse the four pre-formatted fields
+		   read -r pid mem cpu cmd <<< "$line"
+
+																						#  Strip path — get base command name only
+																						cmd=$(basename "$cmd" 2>/dev/null || echo "$cmd")
+
+																						#  Convert float to integer for threshold comparison
+																						mem_int=${mem%.*}
+
+																						## Color logic based on memory percentage
+																						if (( mem_int >= CRIT_THRESHOLD )); then
+																							color="${RED}"
+																						elif (( mem_int >= WARN_THRESHOLD )); then
+																							color="${YELLOW}"
+																						else
+																							color="${GREEN}"
+																						fi
+
+																						#  JSON or display
+																						if [[ "${JSON_MODE:-false}" == "true" ]]; then
+																							entry="{\"pid\":$pid,\"mem_percent\":$mem,\"cpu_percent\":$cpu,\"command\":\"$cmd\"}"
+																							if [[ -z "$proc_json" ]]; then
+																								proc_json="$entry"
+																							else
+																								proc_json="${proc_json}, $entry"						        									fi
+																						else
+																							printf "%-8s %s%-8s${NC} %-8s %s\n" \
+																								"$pid" "$color" "$mem" "$cpu" "$cmd"
+																						fi
+		done < <(ps aux --sort=-%mem | awk 'NR>1 {print $2, $4, $3, $11}' | head -n 5)
+ 
+																						# Finalise JSON array
+																						if [[ "${JSON_MODE:-false}" == "true" ]]; then
+																							JSON_PROCESSES="[$proc_json]"
+																						else
+																							echo ""
+																						fi
+																					}
