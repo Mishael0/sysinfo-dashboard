@@ -186,4 +186,49 @@ mem_info() {
 
     }
 
+    disk_info() {
+	    local line filesystem size used avail pcent pcent_int mount
+	    local color status
+	    local disk_json="" entry
 
+	   # Header (non-JSON mode)
+	   if [[ "${JSON_MODE:-false}" != "true" ]]; then
+		   echo -e "${BOLD}[ DISK USAGE ]${NC}"
+		   printf "%-20s %-8s %-8s %-8s %-6s %s\n" \
+		   "Filesystem" "Size" "Used" "Avail" "Use%" "Status"
+	   fi
+
+		  while IFS= read -r line; do
+	  # Extract all columns in one operation
+		   read -r filesystem size used avail pcent mount <<< "$line"
+
+	  # Strip % sign to get clean integer
+	       	pcent_int=${pcent//%/}
+
+	  # Threshold color logic
+	    if (( pcent_int >= CRIT_THRESHOLD )); then
+		     color="${RED}"
+		     status="✖ CRITICAL"
+	    elif (( pcent_int >= WARN_THRESHOLD )); then
+		     color="${YELLOW}"
+		     status="⚠ WARNING"
+	    else
+		     color="${GREEN}"
+		     status="✔ OK"
+	    fi   
+
+	  # JSON accumulation
+																						     if [[ "${JSON_MODE:-false}" == "true" ]]; then
+	        																					     entry="{\"mount\":\"$mount\",\"used_percent\":$pcent_int}"
+																						     if [[ -z "$disk_json" ]]; then
+																							     disk_json="$entry"																	             else
+		     disk_json="${disk_json}, $entry"																     fi
+																						     printf "%-20s %-8s %-8s %-8s %s%-6s${NC} %s\n" \
+	   	  "$filesystem" "$size" "$used" "$avail" \																     "$color" "$pcent" "$status"
+	     fi
+              done < <(df -h --output=source,size,used,avail,pcent,target | grep '^/dev/')
+
+	   #finalise
+          	   								                      			      	 						    if [[ "${JSON_MODE:-false}" == "true" ]]; then 																    JSON_DISKS="[$disk_json]"							    										    else
+																							    echo ""
+																						    fi																				}
