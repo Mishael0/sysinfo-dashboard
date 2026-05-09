@@ -13,12 +13,12 @@ set -euo pipefail
   # --- Colors ---
 
   if [[ -t 1 ]]; then
-	  RED='\033[0;31m'
-	  YELLOW='\033[1;33m'
-	  GREEN='\033[0;32m'
-	  CYAN='\033[0;36m'
-	  BOLD='\033[1m'
-	  NC='\033[0m'
+	  RED=$'\033[0;31m'
+	  YELLOW=$'\033[1;33m'
+	  GREEN=$'\033[0;32m'
+	  CYAN=$'\033[0;36m'
+	  BOLD=$'\033[1m'
+	  NC=$'\033[0m'
   else
 	  RED=''
 	  YELLOW=''
@@ -222,10 +222,13 @@ mem_info() {
 	  if [[ "${JSON_MODE:-false}" == "true" ]]; then
 		  entry="{\"mount\":\"$mount\",\"used_percent\":$pcent_int}"
 		  if [[ -z "$disk_json" ]]; then
-			  disk_json="$entry"																	             else
-			  disk_json="${disk_json}, $entry"																     fi
-			  printf "%-20s %-8s %-8s %-8s %s%-6s${NC} %s\n" \
-				  "$filesystem" "$size" "$used" "$avail" \																     "$color" "$pcent" "$status"
+			  disk_json="$entry"
+		  else
+			  disk_json="${disk_json}, $entry"
+		  fi
+	  else
+		  printf "%-20s %-8s %-8s %-8s %s%-6s${NC} %s\n" \
+			  "$filesystem" "$size" "$used" "$avail" "$color" "$pcent" "$status"
 	  fi
   done < <(df -h --output=source,size,used,avail,pcent,target | grep '^/dev/')
 
@@ -441,3 +444,64 @@ done
 		echo ""
 	fi
 }
+json_output() {
+	printf '{\n'
+	printf '  "system": {\n'
+	printf '    "hostname": "%s",\n'   "$JSON_HOSTNAME"
+	printf '    "os": "%s",\n'         "$JSON_OS"
+	printf '    "kernel": "%s",\n'     "$JSON_KERNEL"
+	printf '    "uptime": "%s"\n'      "$JSON_UPTIME"
+	printf '  },\n'
+	printf '  "cpu": {\n'
+	printf '    "usage_percent": %s,\n' "$JSON_CPU_USAGE"
+	printf '    "load_1min": "%s",\n'  "$JSON_LOAD_1"
+	printf '    "load_5min": "%s",\n'  "$JSON_LOAD_5"
+	printf '    "load_15min": "%s"\n'  "$JSON_LOAD_15"
+	printf '  },\n'
+	printf '  "memory": {\n'
+	printf '    "used_percent": %s,\n' "$JSON_MEM_PCT"
+	printf '    "swap_percent": %s\n'  "$JSON_SWAP_PCT"
+	printf '  },\n'
+	printf '  "disks": %s,\n'          "$JSON_DISKS"
+	printf '  "processes": %s,\n'       "$JSON_PROCESSES"
+	printf '  "network": {\n'
+	printf '    "interfaces": %s,\n'    "$JSON_NETWORK"
+	printf '    "internet": %s\n'       "$JSON_INTERNET"
+	printf '  },\n'
+	printf '  "ports": %s,\n'           "$JSON_PORTS"
+	printf '  "services": %s\n'         "$JSON_SERVICES"
+	printf '}\n'
+}
+main() {
+	# Initialise JSON storage — safe defaults under set -u
+	JSON_HOSTNAME="" JSON_OS="" JSON_KERNEL="" JSON_UPTIME=""
+	JSON_CPU_USAGE="" JSON_LOAD_1="" JSON_LOAD_5="" JSON_LOAD_15=""
+	JSON_MEM_PCT="" JSON_SWAP_PCT=""
+	JSON_DISKS="[]" JSON_PROCESSES="[]"
+	JSON_NETWORK="[]" JSON_INTERNET="false"
+	JSON_PORTS="[]" JSON_SERVICES="[]"
+
+	#  Parse --json flag
+	JSON_MODE=false
+	if [[ "${1:-}" == "--json" ]]; then
+		JSON_MODE=true
+	fi
+
+	#  Run all sections in order
+	system_info
+	cpu_info
+	mem_info
+	disk_info
+	top_processes
+	network
+	ports
+	services
+
+	# Assemble JSON if requested
+	if [[ "$JSON_MODE" == "true" ]]; then
+		json_output
+	fi
+}
+
+	# Entry point — pass all arguments through
+	main "$@"
