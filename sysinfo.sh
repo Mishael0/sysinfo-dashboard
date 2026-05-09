@@ -390,3 +390,54 @@ ports() {
 	 echo ""
  fi
 }
+services() {
+	local service status color symbol
+	local svc_json="" entry
+
+	# Header
+	if [[ "${JSON_MODE:-false}" != "true" ]]; then
+		echo -e "${BOLD}[ SERVICE STATUS ]${NC}"
+		printf "%-18s %s\n" "Service" "Status"
+	fi
+
+	for service in "${SERVICES[@]}"; do
+		# Get status from systemd
+		status=$(systemctl is-active "$service" 2>/dev/null)
+
+	# Color and symbol logic
+	case "$status" in
+		active)
+			color="${GREEN}"
+			symbol="✔"
+			;;
+		inactive|failed)
+			color="${RED}"
+			symbol="✖"
+			;;
+		*)
+			color="${YELLOW}"
+			symbol="⚠"
+			;;
+	esac
+
+	# JSON or display
+	if [[ "${JSON_MODE:-false}" == "true" ]]; then
+		entry="{\"service\":\"$service\",\"status\":\"$status\"}"
+		if [[ -z "$svc_json" ]]; then
+			svc_json="$entry"
+		else
+			svc_json="${svc_json}, $entry"
+		fi
+	else
+		printf "%-18s %s%s %s${NC}\n" \
+			"$service" "$color" "$symbol" "$status"
+	fi
+done
+
+	# Finalise JSON array
+	if [[ "${JSON_MODE:-false}" == "true" ]]; then
+		JSON_SERVICES="[$svc_json]"
+	else
+		echo ""
+	fi
+}
